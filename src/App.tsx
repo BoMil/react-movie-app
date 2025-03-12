@@ -5,6 +5,9 @@ import Search from "./components/Search";
 import Spinner from "./components/Spiner";
 import { IMovie, Movie } from "./models/movie";
 import MovieCard from "./components/MovieCard";
+import { getTrendingMovies, updateSearchCount } from "./appwrite";
+import { ITrendingMovie, TrendingMovie } from "./models/trendingMovie";
+
 // c8de0e34a103f203ec06066253eda5ab api key
 const API_BASE_URL = "https://api.themoviedb.org/3";
 const API_KEY = import.meta.env.VITE_TMDB_API_KEY;
@@ -23,6 +26,7 @@ function App() {
 	const [errorMessage, setErrorMessage] = useState<string>("");
 	const [movieList, setMovieList] = useState<IMovie[]>([]);
 	const [isLoading, setIsLoading] = useState<boolean>(false);
+	const [trendingMovies, setTrendingMovies] = useState<ITrendingMovie[]>([]);
 
 	const [debouncedSearchTerm, setDebouncedSearchTerm] = useState<string>("");
 
@@ -33,12 +37,17 @@ function App() {
 		fetchMovies(debouncedSearchTerm);
 	}, [debouncedSearchTerm]);
 
+	// This will run when the component loads
+	useEffect(() => {
+		loadTrendingMovies();
+	}, []);
+
 	// This is from the react-use package and it will trigger every time search tearm change
 	useDebounce(
 		() => {
 			setDebouncedSearchTerm(searchTerm);
 		},
-		500,
+		700,
 		[searchTerm]
 	);
 
@@ -58,7 +67,7 @@ function App() {
 			const data = await response.json();
 
 			if (data.Response === "False") {
-				setMovieList([]);
+				// setMovieList([]);
 				setErrorMessage(data.Error || "Error fetching movies. Please try again later");
 				return;
 			}
@@ -68,12 +77,28 @@ function App() {
 
 			setMovieList(movies || []);
 
-			console.log(data);
+			// Save search terms in the database so we can use them laterfor trending section
+			if (query && data.results.length > 0) {
+				await updateSearchCount(query, movies[0]);
+			}
+			// console.log(data);
 		} catch (error) {
 			console.log(`Error fetching movies: ${error}`);
 			setErrorMessage("Error fetching movies. Please try again later");
 		} finally {
 			setIsLoading(false);
+		}
+	};
+
+	const loadTrendingMovies = async () => {
+		try {
+			const result = await getTrendingMovies();
+			const movies: ITrendingMovie[] = result?.map((el: any) => new TrendingMovie(el)) ?? [];
+
+			console.log("Trending movies", result);
+			setTrendingMovies(movies);
+		} catch (error) {
+			console.log("Error fetching trending movies. Please try again later");
 		}
 	};
 
@@ -87,6 +112,21 @@ function App() {
 						<h1 className="text-gradient">
 							Find <span>Movies</span> You'll enjoy without a Hassle
 						</h1>
+
+						{trendingMovies.length > 0 && (
+							<section className="trending">
+								<h2 className="mt-[40px]">Trending</h2>
+
+								<ul>
+									{trendingMovies.map((movie: ITrendingMovie, index) => (
+										<li key={movie.movieId}>
+											<p>{index + 1}</p>
+											<img src={movie.posterPath} alt="Movie poster" />
+										</li>
+									))}
+								</ul>
+							</section>
+						)}
 						<Search searchTerm={searchTerm} setSearchTerm={(search) => setsearchTerm(search)} />
 					</header>
 
